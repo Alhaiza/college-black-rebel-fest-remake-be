@@ -1,3 +1,18 @@
+/**
+ * ============================================================================
+ * [ORDER MODEL] - src/models/order.model.ts
+ * ============================================================================
+ * 
+ * 1. KENAPA DIBUAT? (Why it exists):
+ *    Di MySQL lama, tabel `tiket` hanya menyimpan `(id_tiket, username, jenis, jumlah)`
+ *    di mana jumlah berupa string teks ('satu', 'dua') dan tidak memiliki foreign key
+ *    maupun pencatatan status check-in tiket di pintu gerbang.
+ * 
+ * 2. DESKRIPSI & FUNGSI (What it does):
+ *    Mendefinisikan skema Mongoose untuk transaksi pemesanan tiket beserta riwayat
+ *    audit gate check-in (status `checked-in`, timestamp pemindaian, dan ID admin pemeriksa).
+ */
+
 import { Schema, model, Document, Types } from "mongoose";
 
 export interface IOrder extends Document {
@@ -6,8 +21,10 @@ export interface IOrder extends Document {
   tierName: string;
   quantity: number;
   totalAmount: number;
-  status: "paid" | "cancelled";
+  status: "paid" | "checked-in" | "cancelled";
   ticketCodes: string[];
+  checkedInAt?: Date;
+  checkedInBy?: Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -42,18 +59,26 @@ const orderSchema = new Schema<IOrder>(
     },
     status: {
       type: String,
-      enum: ["paid", "cancelled"],
+      enum: ["paid", "checked-in", "cancelled"],
       default: "paid",
+      index: true,
     },
     ticketCodes: [
       {
         type: String,
         required: true,
+        index: true,
       },
     ],
+    checkedInAt: {
+      type: Date,
+    },
+    checkedInBy: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+    },
   },
   { timestamps: true }
 );
 
 export const Order = model<IOrder>("Order", orderSchema);
-
