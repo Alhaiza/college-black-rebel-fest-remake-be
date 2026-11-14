@@ -37,9 +37,17 @@ export const createOrder = async (
   // userId diperoleh dari payload JWT token yang sudah diverifikasi di auth.middleware.ts
   const userId = req.user?.id;
 
-  // 2.1. Guard clause: Pastikan user terautentikasi
+  // 2.1. Guard clause: Pastikan user terautentikasi dan BUKAN admin
   if (!userId) {
     res.status(401).json({ success: false, message: "Akses ditolak. Silakan login." });
+    return;
+  }
+
+  if (req.user?.role === "admin") {
+    res.status(403).json({
+      success: false,
+      message: "Akun Administrator tidak diizinkan untuk memesan tiket festival.",
+    });
     return;
   }
 
