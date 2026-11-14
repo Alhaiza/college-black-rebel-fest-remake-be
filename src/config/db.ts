@@ -12,32 +12,33 @@
 import mongoose from "mongoose";
 import { ENV } from "./env.js";
 
-// Cache global untuk instance koneksi di serverless environment
-let isConnected = false;
+// Cache global untuk promise koneksi di serverless environment
+let cachedPromise: Promise<typeof mongoose> | null = null;
 
 export const connectDatabase = async (): Promise<void> => {
-  // Jika koneksi sudah aktif, pakai kembali koneksi yang ada (Re-use connection)
-  if (isConnected && mongoose.connection.readyState === 1) {
+  // Jika koneksi sudah aktif (readyState 1 = connected), gunakan langsung
+  if (mongoose.connection.readyState === 1) {
+    return;
+  }
+
+  // Jika sedang dalam proses menyambung, tunggu promise yang sama
+  if (mongoose.connection.readyState === 2 && cachedPromise) {
+    await cachedPromise;
     return;
   }
 
   try {
     mongoose.set("strictQuery", true);
-    await mongoose.connect(ENV.MONGODB_URI, {
+    cachedPromise = mongoose.connect(ENV.MONGODB_URI, {
       serverSelectionTimeoutMS: 5000,
-      autoIndex: ENV.NODE_ENV !== "production",
+      bufferCommands: false, // Matikan buffering agar jika koneksi putus tidak stuck 10 detik
+      autoIndex: false,
     });
-    isConnected = true;
-    console.log("🚀 [Database] Berhasil terhubung ke MongoDB");
+    await cachedPromise;
+    console.log("🚀 [Database] Berhasil terhubung ke MongoDB Atlas");
   } catch (error) {
-    console.error("❌ [Database] Gagal terhubung ke MongoDB:", error);
-    if (ENV.NODE_ENV === "production" && process.env.VERCEL !== "1") {
-      process.exit(1);
-    }
+    cachedPromise = null;
+    console.error("❌ [Database] Gagal terhubung ke MongoDB Atlas:", error);
+    throw error;
   }
-
-  mongoose.connection.on("disconnected", () => {
-    isConnected = false;
-    console.warn("⚠️ [Database] Terputus dari MongoDB. Mencoba menyambung kembali...");
-  });
 };
