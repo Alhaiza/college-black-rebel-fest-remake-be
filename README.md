@@ -109,8 +109,8 @@ Backend ini sudah dikonfigurasi menggunakan `vercel.json` agar bisa berjalan seb
 4. Tambahkan **Environment Variables** di dashboard Vercel:
    - `NODE_ENV` = `production`
    - `PORT` = `5000`
-   - `MONGODB_URI` = `mongodb+srv://<username>:<password>@<cluster>.mongodb.net/brf_remake?retryWrites=true&w=majority`
-   - `JWT_SECRET` = `supersecret_blackrebelfest2022_resilient_key_min32chars`
+   - `MONGODB_URI` = `mongodb+srv://<username>:<password>@<cluster>.mongodb.net/<database>?retryWrites=true&w=majority`
+   - `JWT_SECRET` = `<your_jwt_secret_min_32_chars>`
    - `JWT_EXPIRES_IN` = `1d`
    - `CORS_ORIGIN` = `*` (atau URL Vercel Frontend Anda)
 5. Klik **Deploy**! Backend akan aktif dan memberikan URL publik gratis (misal: `https://college-black-rebel-fest-remake-be.vercel.app`).
