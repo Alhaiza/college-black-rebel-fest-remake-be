@@ -9,33 +9,44 @@ Layanan RESTful Backend API untuk festival musik **Black Rebel Fest 2022**, dimi
 1. **Menggantikan Query Rentan SQL Injection**: Di PHP lama, parameter URL/form dimasukkan langsung ke SQL (`SELECT * FROM tiket WHERE username = '$username'`). Di sini digantikan oleh Mongoose ODM dan validasi skema runtime **Zod**.
 2. **Mengatasi Race Condition / Overselling Tiket**: Menggunakan *atomic query* MongoDB (`$inc` dan `$gte`) agar kuota tiket tidak minus saat diserbu ribuan user bersamaan.
 3. **Mengamankan Autentikasi**: Menggantikan `$_SESSION` file PHP yang rawan pembajakan dengan **Stateless JWT** yang tersimpan aman di dalam **HttpOnly Secure Cookie**.
-4. **Resiliency & Fault Tolerance**: Terdapat *Compensation Rollback* jika pembuatan data tiket gagal di tengah jalan, serta *Centralized Error Boundary*.
+4. **Pemisahan Peran Tegas (Bidirectional RBAC)**:
+   - Pengguna biasa (`user`) diblokir dari endpoint administratif (`/api/v1/admin/*`).
+   - Administrator diblokir dari pemesanan tiket untuk mencegah manipulasi kuota dan konflik kepentingan.
+5. **Resiliency & Fault Tolerance**: Terdapat *Compensation Rollback* jika pembuatan data tiket gagal di tengah jalan, serta *Centralized Error Boundary*.
 
 ---
 
 ## 📁 Struktur Folder Backend
 
 ```text
+api/
+└── index.ts                     # Handler entry point untuk deployment Vercel Serverless
 src/
+├── app.ts                       # Konfigurasi instance Express & middleware pipeline
 ├── config/
 │   ├── env.ts                   # Validasi variabel .env saat server boot (Zod)
-│   └── db.ts                    # Koneksi MongoDB dengan resilience auto-reconnect
+│   └── db.ts                    # Koneksi MongoDB dengan resilience & connection caching
 ├── middlewares/
 │   ├── auth.middleware.ts       # Verifikasi token JWT dari HttpOnly cookie / Bearer
+│   ├── admin.middleware.ts      # RBAC Guard: Memastikan role === 'admin'
+│   ├── userOnly.middleware.ts   # RBAC Guard: Mencegah admin memesan tiket penonton
 │   ├── validate.middleware.ts   # Interceptor validasi payload HTTP body via Zod
 │   └── error.middleware.ts      # Global error handler (Zod, Mongoose duplicate, 500)
 ├── models/
 │   ├── user.model.ts            # Skema User (username, email, passwordHash, role)
 │   ├── ticketTier.model.ts      # Skema Tier Tiket (Bronze, Silver, Gold, harga, stok)
-│   ├── order.model.ts           # Skema Order & daftar kode voucher unik
+│   ├── order.model.ts           # Skema Order, kode barcode unik & audit status check-in
 │   └── lineup.model.ts          # Skema Artis & jadwal panggung festival
 ├── modules/
+│   ├── admin/                   # Controller & Routes analitik, restock kuota & QR scanner
 │   ├── auth/                    # Controller, Routes, & Schema Zod Autentikasi
 │   ├── tickets/                 # Controller & Routes katalog tiket publik
 │   ├── orders/                  # Controller, Routes, & Schema pemesanan tiket atomik
 │   └── lineups/                 # Controller & Routes jadwal artis per hari
 ├── seed.ts                      # Script seeding otomatis data awal festival
-└── server.ts                    # Entry point Express pipeline (Helmet, CORS, Rate-Limit)
+└── server.ts                    # Entry point listener server lokal
+vercel.json                      # Konfigurasi routing serverless Vercel
+Dockerfile                       # Multi-stage production container
 ```
 
 ---
@@ -46,58 +57,60 @@ src/
 Client (React / HTTP Request)
        │
        ▼
-[server.ts] -> Helmet (Header Security) -> CORS -> express.json() -> cookieParser() -> Rate Limiter
+[app.ts] -> Helmet -> CORS -> express.json() -> cookieParser() -> Rate Limiter
        │
        ▼
-[routes.ts] -> /api/v1/... (Auth, Tickets, Orders, Lineups)
+[routes.ts] -> /api/v1/... (Auth, Tickets, Orders, Lineups, Admin)
        │
        ▼
 [validate.middleware.ts] -> Memvalidasi format data request menggunakan Zod schema
        │
        ▼
-[auth.middleware.ts] -> Memverifikasi keabsahan JWT cookie (khusus endpoint private)
+[auth / admin / userOnly.middleware.ts] -> Evaluasi token JWT & otorisasi hak akses (RBAC)
        │
        ▼
-[controller.ts] -> Menjalankan logic bisnis & operasi database atomik Mongoose
+[controller.ts] -> Eksekusi logic bisnis & mutasi atomik database Mongoose
        │
        ▼
-[error.middleware.ts] -> Menangkap & merapikan respons error jika terjadi kegagalan
+[error.middleware.ts] -> Tangkap & rapikan respons error jika terjadi kegagalan
 ```
 
 ---
 
-## 🛠️ Cara Menjalankan Backend
+## 🚀 Panduan Menjalankan Proyek
 
-### 1. Prasyarat
-- Node.js (v20+ LTS)
-- pnpm (atau npm)
-- MongoDB berjalan di port `27017` (lokal atau via `docker compose up -d`)
+### 1. Menjalankan di Lokal (Development)
+1. Salin `.env.example` menjadi `.env`:
+   ```bash
+   cp .env.example .env
+   ```
+2. Install dependencies & isi database awal:
+   ```bash
+   pnpm install
+   pnpm run seed    # Mengisi 9 artis lineup, 3 tier tiket, dan default user admin
+   ```
+3. Jalankan server lokal:
+   ```bash
+   pnpm run dev     # Berjalan di http://localhost:5000
+   ```
+   - Health Check: `GET http://localhost:5000/health`
 
-### 2. Konfigurasi Environment (`.env`)
-Salin file `.env.example` menjadi `.env`:
-```bash
-cp .env.example .env
-```
-Isi default `.env`:
-```env
-PORT=5000
-NODE_ENV=development
-MONGODB_URI=mongodb://localhost:27017/brf_remake
-JWT_SECRET=supersecret_blackrebelfest2022_resilient_key_min32chars
-JWT_EXPIRES_IN=1d
-CORS_ORIGIN=http://localhost:5173
-```
+---
 
-### 3. Install Dependencies & Seeding
-```bash
-pnpm install
-pnpm run seed    # Mengisi 9 artis lineup, 3 tier tiket, dan default user admin
-```
+## ☁️ Panduan Deploy Gratis ke Vercel (Serverless)
 
-### 4. Jalankan Server
-```bash
-pnpm run dev     # Berjalan di http://localhost:5000
-```
-- Health Check: `GET http://localhost:5000/health`
-- Build Production: `pnpm run build` dilanjutkan `pnpm run start`
+Backend ini sudah dikonfigurasi menggunakan `vercel.json` agar bisa berjalan sebagai **Serverless Function di Vercel tanpa perlu kartu kredit**:
 
+1. Login ke [vercel.com](https://vercel.com) -> Klik **Add New...** -> **Project**.
+2. Import repository GitHub: `Alhaiza/college-black-rebel-fest-remake-be`.
+3. Pada halaman konfigurasi Vercel:
+   - **Framework Preset**: Pilih `Other`.
+   - **Root Directory**: `./`.
+4. Tambahkan **Environment Variables** di dashboard Vercel:
+   - `NODE_ENV` = `production`
+   - `PORT` = `5000`
+   - `MONGODB_URI` = `mongodb+srv://<username>:<password>@<cluster>.mongodb.net/brf_remake?retryWrites=true&w=majority`
+   - `JWT_SECRET` = `supersecret_blackrebelfest2022_resilient_key_min32chars`
+   - `JWT_EXPIRES_IN` = `1d`
+   - `CORS_ORIGIN` = `*` (atau URL Vercel Frontend Anda)
+5. Klik **Deploy**! Backend akan aktif dan memberikan URL publik gratis (misal: `https://college-black-rebel-fest-remake-be.vercel.app`).
