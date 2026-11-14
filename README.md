@@ -101,6 +101,15 @@ Client (React / HTTP Request)
 
 Backend ini sudah dikonfigurasi menggunakan `vercel.json` agar bisa berjalan sebagai **Serverless Function di Vercel tanpa perlu kartu kredit**:
 
+### 1. Konfigurasi Wajib MongoDB Atlas (IP Whitelist)
+Sebelum deploy ke Vercel, pastikan cluster MongoDB Atlas Anda mengizinkan koneksi dari serverless Vercel (IP dinamis AWS):
+1. Buka [cloud.mongodb.com](https://cloud.mongodb.com) -> Masuk ke menu **Network Access** (di bawah kategori *Security*).
+2. Klik tombol **Add IP Address**.
+3. Pilih **Allow Access from Anywhere** (atau isi IP `0.0.0.0/0`).
+4. Klik **Confirm** dan pastikan statusnya sudah **Active**.
+*(Tanpa langkah ini, backend Vercel akan mengalami timeout buffering saat mencoba query data).*
+
+### 2. Langkah Deploy di Vercel
 1. Login ke [vercel.com](https://vercel.com) -> Klik **Add New...** -> **Project**.
 2. Import repository GitHub: `Alhaiza/college-black-rebel-fest-remake-be`.
 3. Pada halaman konfigurasi Vercel:
@@ -113,4 +122,5 @@ Backend ini sudah dikonfigurasi menggunakan `vercel.json` agar bisa berjalan seb
    - `JWT_SECRET` = `<your_jwt_secret_min_32_chars>`
    - `JWT_EXPIRES_IN` = `1d`
    - `CORS_ORIGIN` = `*` (atau URL Vercel Frontend Anda)
-5. Klik **Deploy**! Backend akan aktif dan memberikan URL publik gratis (misal: `https://college-black-rebel-fest-remake-be.vercel.app`).
+5. Klik **Deploy**! Backend akan aktif dan memberikan URL publik gratis (misal: `https://<your-backend-app>.vercel.app`).
+   - Uji koneksi: `https://<your-backend-app>.vercel.app/health` -> mengembalikan `{"status":"healthy"}`.
